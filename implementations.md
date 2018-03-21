@@ -16,7 +16,7 @@ Here are a list of implementations that live in Fantasy Land:
   implements Monad and Functor for Promise
 * [Fantasy Sorcery](https://github.com/pufuwozu/fantasy-sorcery)
   provides common functions that work for Fantasy Land structures
-* ECMAScript 5 provides a Semigroup and Functor for Array
+* ECMAScript 5 provides a Semigroup, Functor, and Foldable for Array
 * [lz](https://github.com/goatslacker/lz) implements Semigroup, Monoid, Functor, and Monad for lazy Array and String
 * [Pacta](https://github.com/mudge/pacta) is an algebraic implementation of
   Promises that implements Semigroup, Monoid, Functor, Applicative, Chain and
@@ -28,6 +28,8 @@ Here are a list of implementations that live in Fantasy Land:
 * [TsMonad](https://github.com/cbowdon/tsmonad) implements some common monads for TypeScript.
 * [List in JS](https://github.com/PandaNoir/List-in-JS/) implements Setoid, Semigroup, Monoid, Functor, Applicative, Foldable, Traversable, Chain and Monad.
 * [Sanctuary](https://github.com/plaid/sanctuary) is a refuge from unsafe JavaScript. It provides FL-compatible Either and Maybe types.
+* [Fluture](https://github.com/Avaq/Fluture) is a high-performance monadic alternative to Promises.
+* [Ramda Adjunct](https://github.com/char0n/ramda-adjunct) is a community-maintained extension of Ramda
 
 Conforming implementations are encouraged to promote the Fantasy Land logo:
 

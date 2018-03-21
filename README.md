@@ -10,11 +10,20 @@ This project specifies interoperability of common algebraic
 structures:
 
 * [Setoid](#setoid)
+* [Ord](#ord)
+* [Semigroupoid](#semigroupoid)
+* [Category](#category)
 * [Semigroup](#semigroup)
 * [Monoid](#monoid)
+* [Group](#group)
+* [Filterable](#filterable)
 * [Functor](#functor)
+* [Contravariant](#contravariant)
 * [Apply](#apply)
 * [Applicative](#applicative)
+* [Alt](#alt)
+* [Plus](#plus)
+* [Alternative](#alternative)
 * [Foldable](#foldable)
 * [Traversable](#traversable)
 * [Chain](#chain)
@@ -25,7 +34,7 @@ structures:
 * [Bifunctor](#bifunctor)
 * [Profunctor](#profunctor)
 
-<img src="figures/dependencies.png" width="677" height="212" />
+<img src="figures/dependencies.png" width="888" height="234" />
 
 ## General
 
@@ -46,19 +55,82 @@ have dependencies on other algebras which must be implemented.
     - Two promises are equivalent when they yield equivalent values.
     - Two functions are equivalent if they yield equivalent outputs for equivalent inputs.
 
-## Prefixed method names
+## Type signature notation
 
-In order to add compatibility with Fantasy Land to your library,
-you need to add methods that you want to support with `fantasy-land/` prefix.
-For example if a type implements Functors' [`map`][], you need to add `fantasy-land/map` method to it.
-The code may look something like this:
+The type signature notation used in this document is described below:<sup
+id="sanctuary-types-return">[1](#sanctuary-types)</sup>
 
-```js
-MyType.prototype['fantasy-land/map'] = MyType.prototype.map
+* `::` _"is a member of"._
+    - `e :: t` can be read as: "the expression `e` is a member of type `t`".
+    - `true :: Boolean` - "`true` is a member of type `Boolean`".
+    - `42 :: Integer, Number` - "`42` is a member of type `Integer and
+      Number`".
+* _New types can be created via type constructors._
+    - Type constructors can take zero or more type arguments.
+    - `Array` is a type constructor which takes one type argument.
+    - `Array String` is the type of all arrays of strings. Each of the
+      following has type `Array String`: `[]`, `['foo', 'bar', 'baz']`.
+    - `Array (Array String)` is the type of all arrays of arrays of strings.
+      Each of the following has type `Array (Array String)`: `[]`, `[ [], []
+      ]`, `[ [], ['foo'], ['bar', 'baz'] ]`.
+* _Lowercase letters stand for type variables._
+    - Type variables can take any type unless they have been restricted by
+      means of type constraints (see fat arrow below).
+* `->` (arrow) _Function type constructor._
+    - `->` is an _infix_ type constructor that takes two type arguments where
+      left argument is the input type and the right argument is the output type.
+    - `->`'s input type can be a grouping of types to create the type of a
+      function which accepts zero or more arguments. The syntax is:
+      `(<input-types>) -> <output-type>`, where `<input-types>` comprises zero
+      or more comma–space (`, `)-separated type representations and parens
+      may be omitted for unary functions.
+    - `String -> Array String` is a type satisfied by functions which take a
+      `String` and return an `Array String`.
+    - `String -> Array String -> Array String` is a type satisfied by functions
+      which take a `String` and return a function which takes an `Array String`
+      and returns an `Array String`.
+    - `(String, Array String) -> Array String` is a type satisfied by functions
+      which take a `String` and an `Array String` as arguments and return an
+      `Array String`.
+    - `() -> Number` is a type satisfied by functions
+      which do not take arguments and return a `Number`.
+* `~>` (squiggly arrow) _Method type constructor._
+    - When a function is a property of an Object, it is called a method. All
+      methods have an implicit parameter type - the type of which they are a
+      property.
+    - `a ~> a -> a` is a type satisfied by methods on Objects of type `a` which
+      take a type `a` as an argument and return a value of type `a`.
+* `=>` (fat arrow) _Expresses constraints on type variables._
+    - In `a ~> a -> a` (see squiggly arrow above), `a` can be of any type.
+      `Semigroup a => a ~> a -> a` adds a constraint such that the type `a`
+      must now satisfy the `Semigroup` typeclass. To satisfy a typeclass means
+      to lawfully implement all functions/methods specified by that typeclass.
+
+For example:
+
+```
+traverse :: Applicative f, Traversable t => t a ~> (TypeRep f, a -> f b) -> f (t b)
+'------'    '--------------------------'    '-'    '-------------------'    '-----'
+ '           '                               '      '                        '
+ '           ' - type constraints            '      ' - argument types       ' - return type
+ '                                           '
+ '- method name                              ' - method target type
 ```
 
-It's not required to add unprefixed methods (e.g. `MyType.prototype.map`)
-for compatibility with Fantasy Land, but you're free to do so of course.
+- - -
+1. <a name="sanctuary-types"></a>See the [Types](https://sanctuary.js.org/#types)
+   section in Sanctuary's docs for more info. [↩](#sanctuary-types-return)
+
+## Prefixed method names
+
+In order for a data type to be compatible with Fantasy Land, its values must
+have certain properties. These properties are all prefixed by `fantasy-land/`.
+For example:
+
+```js
+//  MyType#fantasy-land/map :: MyType a ~> (a -> b) -> MyType b
+MyType.prototype['fantasy-land/map'] = ...
+```
 
 Further in this document unprefixed names are used just to reduce noise.
 
@@ -69,12 +141,23 @@ var fl = require('fantasy-land')
 
 // ...
 
-MyType.prototype[fl.map] = MyType.prototype.map
+MyType.prototype[fl.map] = ...
 
 // ...
 
 var foo = bar[fl.map](x => x + 1)
 ```
+
+## Type representatives
+
+Certain behaviours are defined from the perspective of a member of a type.
+Other behaviours do not require a member. Thus certain algebras require a
+type to provide a value-level representative (with certain properties). The
+Identity type, for example, could provide `Id` as its type representative:
+`Id :: TypeRep Identity`.
+
+If a type provides a type representative, each member of the type must have
+a `constructor` property which is a reference to the type representative.
 
 ## Algebras
 
@@ -102,6 +185,81 @@ A value which has a Setoid must provide an `equals` method. The
 
 2. `equals` must return a boolean (`true` or `false`).
 
+### Ord
+
+A value that implements the Ord specification must also implement
+the [Setoid](#setoid) specification.
+
+1. `a.lte(b)` or `b.lte(a)` (totality)
+2. If `a.lte(b)` and `b.lte(a)`, then `a.equals(b)` (antisymmetry)
+3. If `a.lte(b)` and `b.lte(c)`, then `a.lte(c)` (transitivity)
+
+#### `lte` method
+
+```hs
+lte :: Ord a => a ~> a -> Boolean
+```
+
+A value which has an Ord must provide a `lte` method. The
+`lte` method takes one argument:
+
+     a.lte(b)
+
+1. `b` must be a value of the same Ord
+
+    1. If `b` is not the same Ord, behaviour of `lte` is
+       unspecified (returning `false` is recommended).
+
+2. `lte` must return a boolean (`true` or `false`).
+
+### Semigroupoid
+
+1. `a.compose(b).compose(c) === a.compose(b.compose(c))` (associativity)
+
+#### `compose` method
+
+```hs
+compose :: Semigroupoid c => c i j ~> c j k -> c i k
+```
+
+A value which has a Semigroupoid must provide a `compose` method. The
+`compose` method takes one argument:
+
+    a.compose(b)
+
+1. `b` must be a value of the same Semigroupoid
+
+    1. If `b` is not the same semigroupoid, behaviour of `compose` is
+       unspecified.
+
+2. `compose` must return a value of the same Semigroupoid.
+
+### Category
+
+A value that implements the Category specification must also implement
+the [Semigroupoid](#semigroupoid) specification.
+
+1. `a.compose(C.id())` is equivalent to `a` (right identity)
+2. `C.id().compose(a)` is equivalent to `a` (left identity)
+
+#### `id` method
+
+```hs
+id :: Category c => () -> c a a
+```
+
+A value which has a Category must provide an `id` function on its
+[type representative](#type-representatives):
+
+    C.id()
+
+Given a value `c`, one can access its type representative via the
+`constructor` property:
+
+    c.constructor.id()
+
+1. `id` must return a value of the same Category
+
 ### Semigroup
 
 1. `a.concat(b).concat(c)` is equivalent to `a.concat(b.concat(c))` (associativity)
@@ -127,10 +285,10 @@ A value which has a Semigroup must provide a `concat` method. The
 ### Monoid
 
 A value that implements the Monoid specification must also implement
-the Semigroup specification.
+the [Semigroup](#semigroup) specification.
 
-1. `m.concat(m.empty())` is equivalent to `m` (right identity)
-2. `m.empty().concat(m)` is equivalent to `m` (left identity)
+1. `m.concat(M.empty())` is equivalent to `m` (right identity)
+2. `M.empty().concat(m)` is equivalent to `m` (left identity)
 
 #### `empty` method
 
@@ -138,13 +296,64 @@ the Semigroup specification.
 empty :: Monoid m => () -> m
 ```
 
-A value which has a Monoid must provide an `empty` method on itself or
-its `constructor` object. The `empty` method takes no arguments:
+A value which has a Monoid must provide an `empty` function on its
+[type representative](#type-representatives):
 
-    m.empty()
+    M.empty()
+
+Given a value `m`, one can access its type representative via the
+`constructor` property:
+
     m.constructor.empty()
 
 1. `empty` must return a value of the same Monoid
+
+### Group
+
+A value that implements the Group specification must also implement
+the [Monoid](#monoid) specification.
+
+1. `g.concat(g.invert())` is equivalent to `g.constructor.empty()` (right inverse)
+2. `g.invert().concat(g)` is equivalent to `g.constructor.empty()` (left inverse)
+
+#### `invert` method
+
+```hs
+invert :: Group g => g ~> () -> g
+```
+
+A value which has a Group must provide an `invert` method. The
+`invert` method takes no arguments:
+
+    g.invert()
+
+1. `invert` must return a value of the same Group.
+
+### Filterable
+
+1. `v.filter(x => p(x) && q(x))` is equivalent to `v.filter(p).filter(q)` (distributivity)
+2. `v.filter(x => true)` is equivalent to `v` (identity)
+3. `v.filter(x => false)` is equivalent to `w.filter(x => false)`
+   if `v` and `w` are values of the same Filterable (annihilation)
+
+#### `filter` method
+
+```hs
+filter :: Filterable f => f a ~> (a -> Boolean) -> f a
+```
+
+A value which has a Filterable must provide a `filter` method. The `filter`
+method takes one argument:
+
+    v.filter(p)
+
+1. `p` must be a function.
+
+    1. If `p` is not a function, the behaviour of `filter` is unspecified.
+    2. `p` must return either `true` or `false`. If it returns any other value,
+       the behaviour of `filter` is unspecified.
+
+2. `filter` must return a value of the same Filterable.
 
 ### Functor
 
@@ -167,13 +376,40 @@ method takes one argument:
     1. If `f` is not a function, the behaviour of `map` is
        unspecified.
     2. `f` can return any value.
+    3. No parts of `f`'s return value should be checked.
 
 2. `map` must return a value of the same Functor
+
+### Contravariant
+
+1. `u.contramap(a => a)` is equivalent to `u` (identity)
+2. `u.contramap(x => f(g(x)))` is equivalent to `u.contramap(f).contramap(g)`
+(composition)
+
+#### `contramap` method
+
+```hs
+contramap :: Contravariant f => f a ~> (b -> a) -> f b
+```
+
+A value which has a Contravariant must provide a `contramap` method. The
+`contramap` method takes one argument:
+
+    u.contramap(f)
+
+1. `f` must be a function,
+
+    1. If `f` is not a function, the behaviour of `contramap` is
+       unspecified.
+    2. `f` can return any value.
+    3. No parts of `f`'s return value should be checked.
+
+2. `contramap` must return a value of the same Contravariant
 
 ### Apply
 
 A value that implements the Apply specification must also
-implement the Functor specification.
+implement the [Functor](#functor) specification.
 
 1. `v.ap(u.ap(a.map(f => g => x => f(g(x)))))` is equivalent to `v.ap(u).ap(a)` (composition)
 
@@ -188,24 +424,29 @@ method takes one argument:
 
     a.ap(b)
 
-1. `b` must be an Apply of a function,
+1. `b` must be an Apply of a function
 
     1. If `b` does not represent a function, the behaviour of `ap` is
        unspecified.
+    2. `b` must be same Apply as `a`.
 
 2. `a` must be an Apply of any value
 
 3. `ap` must apply the function in Apply `b` to the value in
    Apply `a`
 
+   1. No parts of return value of that function should be checked.
+
+4. The `Apply` returned by `ap` must be the same as `a` and `b`
+
 ### Applicative
 
 A value that implements the Applicative specification must also
-implement the Apply specification.
+implement the [Apply](#apply) specification.
 
-1. `v.ap(a.of(x => x))` is equivalent to `v` (identity)
-2. `a.of(x).ap(a.of(f))` is equivalent to `a.of(f(x))` (homomorphism)
-3. `a.of(y).ap(u)` is equivalent to `u.ap(a.of(f => f(y)))` (interchange)
+1. `v.ap(A.of(x => x))` is equivalent to `v` (identity)
+2. `A.of(x).ap(A.of(f))` is equivalent to `A.of(f(x))` (homomorphism)
+3. `A.of(y).ap(u)` is equivalent to `u.ap(A.of(f => f(y)))` (interchange)
 
 #### `of` method
 
@@ -213,15 +454,83 @@ implement the Apply specification.
 of :: Applicative f => a -> f a
 ```
 
-A value which has an Applicative must provide an `of` method on itself
-or its `constructor` object. The `of` method takes one argument:
+A value which has an Applicative must provide an `of` function on its
+[type representative](#type-representatives). The `of` function takes
+one argument:
 
-    a.of(b)
-    a.constructor.of(b)
+    F.of(a)
+
+Given a value `f`, one can access its type representative via the
+`constructor` property:
+
+    f.constructor.of(a)
 
 1. `of` must provide a value of the same Applicative
 
-    1. No parts of `b` should be checked
+    1. No parts of `a` should be checked
+
+### Alt
+
+A value that implements the Alt specification must also implement
+the [Functor](#functor) specification.
+
+1. `a.alt(b).alt(c)` is equivalent to `a.alt(b.alt(c))` (associativity)
+2. `a.alt(b).map(f)` is equivalent to `a.map(f).alt(b.map(f))` (distributivity)
+
+#### `alt` method
+
+```hs
+alt :: Alt f => f a ~> f a -> f a
+```
+
+A value which has a Alt must provide a `alt` method. The
+`alt` method takes one argument:
+
+    a.alt(b)
+
+1. `b` must be a value of the same Alt
+
+    1. If `b` is not the same Alt, behaviour of `alt` is
+       unspecified.
+    2. `a` and `b` can contain any value of same type.
+    3. No parts of `a`'s and `b`'s containing value should be checked.
+
+2. `alt` must return a value of the same Alt.
+
+### Plus
+
+A value that implements the Plus specification must also implement
+the [Alt](#alt) specification.
+
+1. `x.alt(A.zero())` is equivalent to `x` (right identity)
+2. `A.zero().alt(x)` is equivalent to `x` (left identity)
+3. `A.zero().map(f)` is equivalent to `A.zero()` (annihilation)
+
+#### `zero` method
+
+```hs
+zero :: Plus f => () -> f a
+```
+
+A value which has a Plus must provide an `zero` function on its
+[type representative](#type-representatives):
+
+    A.zero()
+
+Given a value `x`, one can access its type representative via the
+`constructor` property:
+
+    x.constructor.zero()
+
+1. `zero` must return a value of the same Plus
+
+### Alternative
+
+A value that implements the Alternative specification must also implement
+the [Applicative](#applicative) and [Plus](#plus) specifications.
+
+1. `x.ap(f.alt(g))` is equivalent to `x.ap(f).alt(x.ap(g))` (distributivity)
+2. `x.ap(A.zero())` is equivalent to `A.zero()` (annihilation)
 
 ### Foldable
 
@@ -230,7 +539,7 @@ or its `constructor` object. The `of` method takes one argument:
 #### `reduce` method
 
 ```hs
-reduce :: Foldable f => f a ~> (b -> a -> b) -> b -> b
+reduce :: Foldable f => f a ~> ((b, a) -> b, b) -> b
 ```
 
 A value which has a Foldable must provide a `reduce` method. The `reduce`
@@ -242,22 +551,27 @@ method takes two arguments:
 
     1. if `f` is not a function, the behaviour of `reduce` is unspecified.
     2. The first argument to `f` must be the same type as `x`.
-    3. `f` must return a value of the same type as `x`
+    3. `f` must return a value of the same type as `x`.
+    4. No parts of `f`'s return value should be checked.
 
 1. `x` is the initial accumulator value for the reduction
+
+    1. No parts of `x` should be checked.
 
 ### Traversable
 
 A value that implements the Traversable specification must also
-implement the Functor and Foldable specifications.
+implement the [Functor](#functor) and [Foldable](#foldable) specifications.
 
-1. `t(u.traverse(x => x, F.of))` is equivalent to `u.traverse(t, G.of)`
-for any `t` such that `t(a).map(f)` is equivalent to `t(a.map(f))` (naturality)
+1. `t(u.traverse(F, x => x))` is equivalent to `u.traverse(G, t)` for any
+   `t` such that `t(a).map(f)` is equivalent to `t(a.map(f))` (naturality)
 
-2. `u.traverse(F.of, F.of)` is equivalent to `F.of(u)` for any Applicative `F` (identity)
+2. `u.traverse(F, F.of)` is equivalent to `F.of(u)` for any Applicative `F`
+   (identity)
 
-3. `u.traverse(x => new Compose(x), Compose.of)` is equivalent to
-   `new Compose(u.traverse(x => x, F.of).map(x => x.traverse(x => x, G.of)))` for `Compose` defined below and any Applicatives `F` and `G` (composition)
+3. `u.traverse(Compose, x => new Compose(x))` is equivalent to
+   `new Compose(u.traverse(F, x => x).map(x => x.traverse(G, x => x)))` for
+   `Compose` defined below and any Applicatives `F` and `G` (composition)
 
 ```js
 var Compose = function(c) {
@@ -280,27 +594,29 @@ Compose.prototype.map = function(f) {
 #### `traverse` method
 
 ```hs
-traverse :: Apply f, Traversable t => t a ~> ((a -> f b), (c -> f c)) -> f (t b)
+traverse :: Applicative f, Traversable t => t a ~> (TypeRep f, a -> f b) -> f (t b)
 ```
 
 A value which has a Traversable must provide a `traverse` method. The `traverse`
 method takes two arguments:
 
-    u.traverse(f, of)
+    u.traverse(A, f)
 
-1. `f` must be a function which returns a value
+1. `A` must be the [type representative](#type-representatives) of an
+   Applicative.
+
+2. `f` must be a function which returns a value
 
     1. If `f` is not a function, the behaviour of `traverse` is
        unspecified.
-    2. `f` must return a value of an Applicative
+    2. `f` must return a value of the type represented by `A`.
 
-2. `of` must be the `of` method of the Applicative that `f` returns
-3. `traverse` must return a value of the same Applicative that `f` returns
+3. `traverse` must return a value of the type represented by `A`.
 
 ### Chain
 
 A value that implements the Chain specification must also
-implement the Apply specification.
+implement the [Apply](#apply) specification.
 
 1. `m.chain(f).chain(g)` is equivalent to `m.chain(x => f(x).chain(g))` (associativity)
 
@@ -325,24 +641,29 @@ method takes one argument:
 
 ### ChainRec
 
-A value that implements the ChainRec specification must also implement the Chain specification.
+A value that implements the ChainRec specification must also implement the [Chain](#chain) specification.
 
-1. `m.chainRec((next, done, v) => p(v) ? d(v).map(done) : n(v).map(next), i)`
+1. `M.chainRec((next, done, v) => p(v) ? d(v).map(done) : n(v).map(next), i)`
    is equivalent to
    `(function step(v) { return p(v) ? d(v) : n(v).chain(step); }(i))` (equivalence)
-2. Stack usage of `m.chainRec(f, i)` must be at most a constant multiple of the stack usage of `f` itself.
+2. Stack usage of `M.chainRec(f, i)` must be at most a constant multiple of the stack usage of `f` itself.
 
 #### `chainRec` method
 
 ```hs
-chainRec :: ChainRec m => ((a -> c) -> (b -> c) -> a -> m c) -> a -> m b
+chainRec :: ChainRec m => ((a -> c, b -> c, a) -> m c, a) -> m b
 ```
 
-A Type which has a ChainRec must provide a `chainRec` method on itself
-or its `constructor` object. The `chainRec` method takes two arguments:
+A Type which has a ChainRec must provide a `chainRec` function on its
+[type representative](#type-representatives). The `chainRec` function
+takes two arguments:
 
-    a.chainRec(f, i)
-    a.constructor.chainRec(f, i)
+    M.chainRec(f, i)
+
+Given a value `m`, one can access its type representative via the
+`constructor` property:
+
+    m.constructor.chainRec(f, i)
 
 1. `f` must be a function which returns a value
     1. If `f` is not a function, the behaviour of `chainRec` is unspecified.
@@ -356,12 +677,14 @@ or its `constructor` object. The `chainRec` method takes two arguments:
 ### Monad
 
 A value that implements the Monad specification must also implement
-the Applicative and Chain specifications.
+the [Applicative](#applicative) and [Chain](#chain) specifications.
 
-1. `m.of(a).chain(f)` is equivalent to `f(a)` (left identity)
-2. `m.chain(m.of)` is equivalent to `m` (right identity)
+1. `M.of(a).chain(f)` is equivalent to `f(a)` (left identity)
+2. `m.chain(M.of)` is equivalent to `m` (right identity)
 
 ### Extend
+
+A value that implements the Extend specification must also implement the [Functor](#functor) specification.
 
 1. `w.extend(g).extend(f)` is equivalent to `w.extend(_w => f(_w.extend(g)))`
 
@@ -381,16 +704,16 @@ method takes one argument:
     1. If `f` is not a function, the behaviour of `extend` is
        unspecified.
     2. `f` must return a value of type `v`, for some variable `v` contained in `w`.
+    3. No parts of `f`'s return value should be checked.
 
 2. `extend` must return a value of the same Extend.
 
 ### Comonad
 
-A value that implements the Comonad specification must also implement the Functor and Extend specifications.
+A value that implements the Comonad specification must also implement the [Extend](#extend) specification.
 
-1. `w.extend(_w => _w.extract())` is equivalent to `w`
-2. `w.extend(f).extract()` is equivalent to `f(w)`
-3. `w.extend(f)` is equivalent to `w.extend(x => x).map(f)`
+1. `w.extend(_w => _w.extract())` is equivalent to `w` (left identity)
+2. `w.extend(f).extract()` is equivalent to `f(w)` (right identity)
 
 #### `extract` method
 
@@ -401,7 +724,7 @@ extract :: Comonad w => w a ~> () -> a
 A value which has a Comonad must provide an `extract` method on itself.
 The `extract` method takes no arguments:
 
-    c.extract()
+    w.extract()
 
 1. `extract` must return a value of type `v`, for some variable `v` contained in `w`.
     1. `v` must have the same type that `f` returns in `extend`.
@@ -409,7 +732,7 @@ The `extract` method takes no arguments:
 ### Bifunctor
 
 A value that implements the Bifunctor specification must also implement
-the Functor specification.
+the [Functor](#functor) specification.
 
 1. `p.bimap(a => a, b => b)` is equivalent to `p` (identity)
 2. `p.bimap(a => f(g(a)), b => h(i(b))` is equivalent to `p.bimap(g, i).bimap(f, h)` (composition)
@@ -417,7 +740,7 @@ the Functor specification.
 #### `bimap` method
 
 ```hs
-bimap :: Bifunctor f => f a c ~> (a -> b) -> (c -> d) -> f b d
+bimap :: Bifunctor f => f a c ~> (a -> b, c -> d) -> f b d
 ```
 
 A value which has a Bifunctor must provide a `bimap` method. The `bimap`
@@ -429,18 +752,20 @@ method takes two arguments:
 
     1. If `f` is not a function, the behaviour of `bimap` is unspecified.
     2. `f` can return any value.
+    3. No parts of `f`'s return value should be checked.
 
 2. `g` must be a function which returns a value
 
     1. If `g` is not a function, the behaviour of `bimap` is unspecified.
     2. `g` can return any value.
+    3. No parts of `g`'s return value should be checked.
 
 3. `bimap` must return a value of the same Bifunctor.
 
 ### Profunctor
 
 A value that implements the Profunctor specification must also implement
-the Functor specification.
+the [Functor](#functor) specification.
 
 1. `p.promap(a => a, b => b)` is equivalent to `p` (identity)
 2. `p.promap(a => f(g(a)), b => h(i(b)))` is equivalent to `p.promap(f, i).promap(g, h)` (composition)
@@ -448,7 +773,7 @@ the Functor specification.
 #### `promap` method
 
 ```hs
-promap :: Profunctor p => p b c ~> (a -> b) -> (c -> d) -> p a d
+promap :: Profunctor p => p b c ~> (a -> b, c -> d) -> p a d
 ```
 
 A value which has a Profunctor must provide a `promap` method.
@@ -461,11 +786,13 @@ The `profunctor` method takes two arguments:
 
     1. If `f` is not a function, the behaviour of `promap` is unspecified.
     2. `f` can return any value.
+    3. No parts of `f`'s return value should be checked.
 
 2. `g` must be a function which returns a value
 
     1. If `g` is not a function, the behaviour of `promap` is unspecified.
     2. `g` can return any value.
+    3. No parts of `g`'s return value should be checked.
 
 3. `promap` must return a value of the same Profunctor
 
@@ -473,6 +800,12 @@ The `profunctor` method takes two arguments:
 
 When creating data types which satisfy multiple algebras, authors may choose
 to implement certain methods then derive the remaining methods. Derivations:
+
+  - [`equals`][] may be derived from [`lte`][]:
+
+    ```js
+    function(other) { return this.lte(other) && other.lte(this); }
+    ```
 
   - [`map`][] may be derived from [`ap`][] and [`of`][]:
 
@@ -530,7 +863,7 @@ to implement certain methods then derive the remaining methods. Derivations:
     function(f) {
       function Id(value) {
         this.value = value;
-      };
+      }
       Id.of = function(x) {
         return new Id(x);
       };
@@ -541,6 +874,25 @@ to implement certain methods then derive the remaining methods. Derivations:
         return new Id(this.value(b.value));
       };
       return this.traverse(x => Id.of(f(x)), Id.of).value;
+    }
+    ```
+
+  - [`filter`][] may be derived from [`of`][], [`chain`][], and [`zero`][]:
+
+    ```js
+    function(pred) {
+      var F = this.constructor;
+      return this.chain(x => pred(x) ? F.of(x) : F.zero());
+    }
+    ```
+
+  - [`filter`][] may be derived from [`concat`][], [`of`][], [`zero`][], and
+    [`reduce`][]:
+
+    ```js
+    function(pred) {
+      var F = this.constructor;
+      return this.reduce((f, x) => pred(x) ? f.concat(F.of(x)) : f, F.zero());
     }
     ```
 
@@ -555,8 +907,8 @@ be equivalent to that of the derivation (or derivations).
 2. It's discouraged to overload the specified methods. It can easily
    result in broken and buggy behaviour.
 3. It is recommended to throw an exception on unspecified behaviour.
-4. An `Id` container which implements all methods is provided in
-   `id.js`.
+4. An `Id` container which implements many of the methods is provided in
+   `internal/id.js`.
 
 
 [`ap`]: #ap-method
@@ -567,13 +919,16 @@ be equivalent to that of the derivation (or derivations).
 [`equals`]: #equals-method
 [`extend`]: #extend-method
 [`extract`]: #extract-method
+[`filter`]: #filter-method
+[`lte`]: #lte-method
 [`map`]: #map-method
 [`of`]: #of-method
 [`promap`]: #promap-method
 [`reduce`]: #reduce-method
 [`sequence`]: #sequence-method
+[`zero`]: #zero-method
 
 ## Alternatives
 
 There also exists [Static Land Specification](https://github.com/rpominov/static-land)
-with the exactly same ideas as Fantasy Land but based on static methods instead of instance methods.
+with exactly the same ideas as Fantasy Land but based on static methods instead of instance methods.
